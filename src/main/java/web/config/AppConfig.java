@@ -7,12 +7,15 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.orm.hibernate5.HibernateTransactionManager;
-import org.springframework.orm.hibernate5.LocalSessionFactoryBean;
+import org.springframework.orm.jpa.JpaTransactionManager;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
-import web.model.User;
 
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Properties;
 
 
@@ -32,27 +35,38 @@ public class AppConfig {
         dataSource.setUrl(env.getProperty("db.url"));
         dataSource.setUsername(env.getProperty("db.username"));
         dataSource.setPassword(env.getProperty("db.password"));
+
         return dataSource;
     }
 
     @Bean
-    public LocalSessionFactoryBean getSessionFactory() {
-        LocalSessionFactoryBean factoryBean = new LocalSessionFactoryBean();
-        factoryBean.setDataSource(getDataSource());
+    public LocalContainerEntityManagerFactoryBean getEntityManagerFactory() {
+        LocalContainerEntityManagerFactoryBean emf = new LocalContainerEntityManagerFactoryBean();
+        emf.setDataSource(getDataSource());
+        emf.setPackagesToScan("web.model");
+        emf.setJpaVendorAdapter(new HibernateJpaVendorAdapter());
+        emf.setJpaProperties(getHibernateProperties());
 
-        Properties props=new Properties();
-        props.put("hibernate.show_sql", env.getProperty("hibernate.show_sql"));
-        props.put("hibernate.hbm2ddl.auto", env.getProperty("hibernate.hbm2ddl.auto"));
+        return emf;
+    }
 
-        factoryBean.setHibernateProperties(props);
-        factoryBean.setAnnotatedClasses(User.class);
-        return factoryBean;
+    private Properties getHibernateProperties() {
+        try {
+            Properties hibernateProperties = new Properties();
+            InputStream is = getClass().getClassLoader().getResourceAsStream("hibernate.properties");
+            hibernateProperties.load(is);
+
+            return hibernateProperties;
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to load hibernate.properties", e);
+        }
     }
 
     @Bean
-    public HibernateTransactionManager getTransactionManager() {
-        HibernateTransactionManager transactionManager = new HibernateTransactionManager();
-        transactionManager.setSessionFactory(getSessionFactory().getObject());
+    public PlatformTransactionManager getTransactionManager() {
+        JpaTransactionManager transactionManager = new JpaTransactionManager();
+        transactionManager.setEntityManagerFactory(getEntityManagerFactory().getObject());
+
         return transactionManager;
     }
 }
